@@ -5,53 +5,55 @@ char clientfifo[CLIENT_FIFO_NAME_LEN];
 
 int main(int argc, char *argv[]){
 
-        int serverFd, clientFd;
+    
         struct request req;
-        struct response resp;
+        
 
-        if (argc != 1 ){
+        if (argc != 2 ){
             printf("invalid argc\n");
             exit(1);
         }
                 
 
-        /* Create our FIFO (before sending request, to avoid a race) */
+        /*  */
 
-        umask(0);                   /* So we get the permissions we want */
+        umask(0);                   /* Делаем фифошку клиента*/
     snprintf(clientfifo, CLIENT_FIFO_NAME_LEN, CLIENT_FIFO_TEMPLATE, (long) getpid());
-        if (mkfifo(clientFifo, 0666) == -1  && errno != EEXIST){
+        if (mkfifo(clientfifo, 0666) == -1  && errno != EEXIST){
            perror("mkfifo");
            exit(1);
         }
 
 
 
-        /* Construct request message, open server FIFO, and send request */
+        /* создаем запрос, открываем трубу сервера */
 
     req.pid = getpid();
-    req.seqLen = strlen(argv[1]);
-    strcpy(argv[1], req.filename);
+    strcpy(req.filename, argv[1]);
 
-    serverFd = Openfd(SERVER_FIFO, O_WRONLY | O_NONBLOCK, "");
+    int serverFd = Openfd(SERVER_FIFO, O_WRONLY | O_NONBLOCK, "");
     DisableNONBLOCK(serverFd);
    
            
 
-        /* Open our FIFO, read and display response */
+        /* открываем нашу трубу, если открывать без нонблока то она будет ждать пока откроется второй конец, нам это не нужно */
     int clientFd = Openfd(clientfifo, O_RDONLY | O_NONBLOCK, "file receiverFd open");
-    DisableNONBLOCK(clientFd);
+    DisableNONBLOCK(clientFd);  /* выключаем нонблок и переходим в блокирующий режим */
 
+     /* после того как все сделали пише серверу запрос */
      write(serverFd, &req, sizeof(struct request));
 
     char buf[PIPE_BUF] = "";
     int indicator = 0;
     int reallength = PIPE_BUF;
 
-    while(reallength == PIPE_BUF && !buf[0] ) { 
+     /* внутренний цикл нужен для того чтобы ждать ответа сервера только определенное время */
+
+    while(reallength == PIPE_BUF && !buf[0] ) {   /* первый байт каждого сообщения это 0 если оно не последнее и 1 если последнее */
         int i = 0;
-        while(i < 5)
+        while(i < 5)  /*  ждем до 5 секунд*/
         {
-            ioctl(clientFd, FIONREAD, &indicator);
+            ioctl(clientFd, FIONREAD, &indicator);  /* проверить если ли инфа в трубе */
             if (indicator){
                 break;
             }
@@ -59,11 +61,11 @@ int main(int argc, char *argv[]){
             sleep(1);
         }
 
-        if (i == WAITSECONDS){
+        if (i == 5){     /* если 5 секунд прошли то ошибка */
             printf("server failed or going too slow\n");
             exit(1);
         }
-        reallength = read(clientFd, buf,  PIPE_BUF);
+        reallength = read(clientFd, buf,  PIPE_BUF); 
         write(STDOUT_FILENO, buf + 1 , reallength - 1); 
 
     }

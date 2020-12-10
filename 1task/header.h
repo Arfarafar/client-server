@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <sys/ioctl.h>
+#include <string.h>
 
 #define SERVER_FIFO "/tmp/seqnum_sv"
                                 /* Well-known name for server's FIFO */
@@ -20,7 +21,6 @@
 
 struct request {                /* Request (client --> server) */
     pid_t pid;                  /* PID of client */
-    int seqLen;                 /* Length of desired sequence */
 	char filename[256];
 };
 
